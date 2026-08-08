@@ -589,7 +589,7 @@ button:disabled {
 /* Product shell */
 
 .product-shell { min-height: 100svh; }
-.product-header { position: sticky; top: 0; z-index: 20; width: min(1240px, calc(100% - 40px)); height: 82px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 30px; border-bottom: 1px solid var(--line); background: rgba(247, 246, 242, 0.92); backdrop-filter: blur(16px); }
+.product-header { position: sticky; top: 0; z-index: 20; width: 100%; height: 82px; padding-inline: max(20px, calc((100% - 1240px) / 2)); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 30px; border-bottom: 1px solid var(--line); background: rgba(247, 246, 242, 0.92); backdrop-filter: blur(16px); }
 .desktop-nav { display: flex; justify-content: center; gap: 5px; }
 .desktop-nav button, .mobile-nav button { padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
 .desktop-nav button.is-active, .mobile-nav button.is-active { background: white; color: var(--ink); box-shadow: 0 4px 14px rgba(30, 28, 39, 0.07); }
@@ -929,7 +929,7 @@ button:disabled {
   .auth-card { padding: 27px 20px; }
   .auth-card__heading h1 { font-size: 36px; }
   .demo-login-box > div { display: grid; }
-  .product-header { width: calc(100% - 28px); height: 74px; }
+  .product-header { height: 74px; padding-inline: 14px; }
   .product-header .brand__name, .profile-menu__copy, .profile-menu > .text-button { display: none; }
   .mobile-nav { top: 74px; padding-inline: 14px; }
   .product-main { padding: 42px 0 70px; }

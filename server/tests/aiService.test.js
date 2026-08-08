@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   COACH_INSTRUCTIONS,
+  condenseAnswer,
   createAiService,
   selectAiProviders,
 } from '../src/services/ai/aiService.js'
 import { createGeminiProvider } from '../src/services/ai/providers/geminiProvider.js'
-import { createOpenAiProvider } from '../src/services/ai/providers/openAiProvider.js'
 
 const teenUser = { id: 'teen-user-id', role: 'teen' }
 const teenContext = {
@@ -143,26 +143,48 @@ describe('AI provider adapters', () => {
     })
   })
 
-  it('keeps OpenAI storage disabled and sends the hashed safety identifier', async () => {
-    const create = vi.fn().mockResolvedValue({ output_text: ' OpenAI response ' })
-    const provider = createOpenAiProvider({
-      model: 'openai-test-model',
-      client: { responses: { create } },
+  it('returns no provider when Gemini is not configured', () => {
+    expect(createGeminiProvider({ apiKey: '  ' })).toBeNull()
+    expect(selectAiProviders({ openAiProvider: null, geminiProvider: null })).toEqual([])
+  })
+})
+
+describe('Coach answer formatting', () => {
+  it('strips markdown artifacts from provider answers', async () => {
+    const geminiProvider = mockProvider(
+      'gemini',
+      async () =>
+        '## Safe to spend\n\n**$100** is safe to spend.\n\n- Bills take _$40_\n- Savings take `$20`',
+    )
+    const service = createAiService({
+      contextLoader: async () => teenContext,
+      geminiProvider,
     })
 
-    await expect(
-      provider.generate({
-        instructions: 'Shared guardrails',
-        input: 'Context',
-        safetyIdentifier: 'hashed-user-id',
-      }),
-    ).resolves.toBe('OpenAI response')
-    expect(create).toHaveBeenCalledWith({
-      model: 'openai-test-model',
-      instructions: 'Shared guardrails',
-      input: 'Context',
-      safety_identifier: 'hashed-user-id',
-      store: false,
-    })
+    const answer = await service.answerFinancialQuestion(teenUser, 'Why?')
+
+    expect(answer.text).not.toMatch(/[*`#]/)
+    expect(answer.text).toBe('Safe to spend $100 is safe to spend. Bills take $40 Savings take $20')
+  })
+
+  it('keeps answers short and never splits money amounts', () => {
+    const long = Array.from(
+      { length: 6 },
+      (_, index) => `Sentence number ${index} explains one more trade-off in detail.`,
+    ).join(' ')
+
+    expect(condenseAnswer(long).length).toBeLessThanOrEqual(240)
+    expect(condenseAnswer(long).split(/(?<=[.!?])\s+/)).toHaveLength(3)
+    expect(condenseAnswer('You have $12.50 left. Spend it well. Then review. And again.')).toBe(
+      'You have $12.50 left. Spend it well. Then review.',
+    )
+  })
+
+  it('condenses the deterministic fallback too', async () => {
+    const service = createAiService({ contextLoader: async () => teenContext })
+    const answer = await service.answerFinancialQuestion(teenUser, 'Why is safe-to-spend lower?')
+
+    expect(answer.text.length).toBeLessThanOrEqual(240)
+    expect(answer.text).toContain('$100 safe to spend')
   })
 })
