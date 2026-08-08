@@ -1,9 +1,10 @@
 import crypto from 'node:crypto'
-import OpenAI from 'openai'
 import { env } from '../../config/env.js'
 import { getParentOverview, getTeenOverview } from '../overview/overviewService.js'
+import { createGeminiProvider } from './providers/geminiProvider.js'
+import { createOpenAiProvider } from './providers/openAiProvider.js'
 
-const COACH_INSTRUCTIONS = `You are an educational family financial coach for 18 Before 18.
+export const COACH_INSTRUCTIONS = `You are an educational family financial coach for 18 Before 18.
 Explain concepts and trade-offs using only the supplied permitted context.
 Do not shame spending or present one decision as morally correct.
 Do not act as a regulated financial adviser.
@@ -12,10 +13,6 @@ Clearly distinguish simulated Family Advances from real BNPL or credit.
 Use concise, age-appropriate language.
 Encourage discussion with a parent for significant decisions.
 Never infer, request, or expose information outside the current user's permissions.`
-
-const openai = env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: env.OPENAI_API_KEY })
-  : null
 
 function safetyIdentifier(userId) {
   return crypto.createHash('sha256').update(String(userId)).digest('hex')
@@ -70,42 +67,68 @@ async function permittedContext(user) {
     : getTeenOverview(user)
 }
 
-export async function answerFinancialQuestion(user, question) {
-  const context = await permittedContext(user)
-  const fallback =
-    user.role === 'parent'
-      ? fallbackParentAnswer(context, question)
-      : fallbackTeenAnswer(context, question)
+export function selectAiProviders({ openAiProvider, geminiProvider }) {
+  return [openAiProvider, geminiProvider].filter(Boolean)
+}
 
-  if (!openai) {
-    return { text: fallback, mode: 'fallback' }
-  }
+export function createAiService({
+  contextLoader = permittedContext,
+  openAiProvider = null,
+  geminiProvider = null,
+} = {}) {
+  const providers = selectAiProviders({ openAiProvider, geminiProvider })
 
-  try {
-    const response = await openai.responses.create({
-      model: env.OPENAI_MODEL,
-      instructions: COACH_INSTRUCTIONS,
-      input: `User role: ${user.role}\nPermitted financial context: ${JSON.stringify(
-        context,
-      )}\nQuestion: ${question}`,
-      safety_identifier: safetyIdentifier(user.id),
-      store: false,
-    })
+  async function answerFinancialQuestion(user, question) {
+    const context = await contextLoader(user)
+    const fallback =
+      user.role === 'parent'
+        ? fallbackParentAnswer(context, question)
+        : fallbackTeenAnswer(context, question)
+    const input = `User role: ${user.role}\nPermitted financial context: ${JSON.stringify(
+      context,
+    )}\nQuestion: ${question}`
 
-    return {
-      text: response.output_text || fallback,
-      mode: response.output_text ? 'openai' : 'fallback',
+    for (const provider of providers) {
+      try {
+        const text = await provider.generate({
+          instructions: COACH_INSTRUCTIONS,
+          input,
+          safetyIdentifier: safetyIdentifier(user.id),
+        })
+
+        if (text?.trim()) {
+          return { text: text.trim(), mode: provider.name }
+        }
+      } catch {
+        // Try the next configured provider before using the deterministic fallback.
+      }
     }
-  } catch {
+
     return { text: fallback, mode: 'fallback' }
   }
+
+  async function generateInsight(user) {
+    const question =
+      user.role === 'parent'
+        ? 'What is the one most useful, non-judgemental conversation to have this week?'
+        : 'What is the one most useful thing to understand about my money this week?'
+
+    return answerFinancialQuestion(user, question)
+  }
+
+  return { answerFinancialQuestion, generateInsight }
 }
 
-export async function generateInsight(user) {
-  const question =
-    user.role === 'parent'
-      ? 'What is the one most useful, non-judgemental conversation to have this week?'
-      : 'What is the one most useful thing to understand about my money this week?'
+const defaultAiService = createAiService({
+  openAiProvider: createOpenAiProvider({
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+  }),
+  geminiProvider: createGeminiProvider({
+    apiKey: env.GEMINI_API_KEY,
+    model: env.GEMINI_MODEL,
+  }),
+})
 
-  return answerFinancialQuestion(user, question)
-}
+export const answerFinancialQuestion = defaultAiService.answerFinancialQuestion
+export const generateInsight = defaultAiService.generateInsight

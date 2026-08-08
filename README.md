@@ -15,7 +15,7 @@ This repository contains the hackathon MVP described by the [product steering do
 - Parent Dashboard for household settings, responsibilities, privacy controls, Family Advance decisions, learning signals, prompts, and weekly reporting.
 - Teen Dashboard for real balance, committed bills, savings commitment, safe-to-spend, savings goal progress, What-If simulations, Family Advances, practice scenarios, transaction history, and weekly reporting.
 - A behaviour-based Financial Habits Score with a visible, understandable breakdown.
-- A role-aware AI coach using the OpenAI Responses API when configured, with a deterministic local fallback when it is not.
+- A role-aware AI coach with ordered OpenAI, Gemini, and deterministic fallback providers.
 - Seeded Taylor family data supporting the complete demo journey.
 
 ## Architecture
@@ -40,7 +40,7 @@ The server owns all balances, safe-to-spend calculations, authorization decision
 - MongoDB and Mongoose
 - JWT authentication in HTTP-only cookies; bcrypt password hashing
 - Zod validation, Helmet, CORS allowlisting, and rate limiting
-- OpenAI JavaScript SDK with Responses API and offline fallback
+- OpenAI and Google GenAI JavaScript SDKs with an offline fallback
 - Vitest, Supertest, and MongoDB Memory Server
 
 ## Local setup
@@ -74,8 +74,10 @@ If the repository is already cloned and dependencies are present, only `npm run 
 | `MONGODB_URI` | No | MongoDB connection; defaults to `mongodb://127.0.0.1:27017/18-before-18`. |
 | `JWT_SECRET` | Yes outside local defaults | Secret of at least 24 characters. Use a long random value in deployed environments. |
 | `CLIENT_URL` | No | Exact allowed browser origin; defaults to `http://localhost:5173`. |
-| `OPENAI_API_KEY` | No | Enables live AI responses. Without it, the local coach fallback is used. |
+| `OPENAI_API_KEY` | No | Enables the first-priority OpenAI provider. |
 | `OPENAI_MODEL` | No | OpenAI model name; defaults to `gpt-5.6`. |
+| `GEMINI_API_KEY` | No | Enables Gemini when OpenAI is not configured or its request fails. |
+| `GEMINI_MODEL` | No | Gemini model name; defaults to `gemini-3.6-flash`. |
 | `NODE_ENV` | No | `development`, `test`, or `production`. Production enables secure cookies and hides stack traces. |
 | `ALLOW_SEED` | No | Must be `true` to seed a database whose name does not contain `18-before-18`. |
 
@@ -177,6 +179,7 @@ This separation is enforced in server serializers and services and covered by au
 - CORS accepts the configured client origin and credentials only.
 - Helmet, payload limits, auth/AI rate limits, Zod schemas, Mongo identifier validation, role checks, household checks, and centralized errors are enabled.
 - AI context is assembled from the same role-filtered overview services used by the dashboards. Live Responses calls disable storage and use a one-way hashed safety identifier.
+- AI providers share the same educational guardrails and permitted context. Provider priority is OpenAI, then Gemini, then deterministic fallback; provider errors do not break the coach endpoint.
 
 ## Known limitations
 

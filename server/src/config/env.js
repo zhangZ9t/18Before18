@@ -17,6 +17,8 @@ const environmentSchema = z.object({
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-5.6'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
 })
 
 const parsedEnvironment = environmentSchema.safeParse(process.env)
