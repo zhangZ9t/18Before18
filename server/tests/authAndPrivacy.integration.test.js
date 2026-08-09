@@ -163,6 +163,60 @@ describe('authentication and household privacy API', () => {
     expect(discussion.summary).not.toMatch(/[*`#]/)
     expect(JSON.stringify(response.body)).not.toContain('Steam')
     expect(JSON.stringify(response.body)).not.toContain('Game bundle')
+
+    // Coach wording is stored on the prompt and survives the next detection pass unchanged.
+    const refreshed = await parentAgent.get('/api/parent/overview')
+    const prompt = refreshed.body.data.conversationPrompt
+    expect(prompt.signalType).toBe('category_dominant')
+    if (discussion.mode !== 'fallback') {
+      expect(prompt.mode).toBe(discussion.mode)
+      expect(prompt.insight).toBe(discussion.summary)
+    }
+  })
+
+  it('derives the conversation prompt from real transactions and follows the spending', async () => {
+    const { parentAgent, teenAgent } = await registerFamily()
+    const spend = (amount, category) =>
+      teenAgent.post('/api/transactions').send({ amount, type: 'expense', category })
+
+    await spend(30, 'Food')
+    await spend(28, 'Transport')
+    await spend(25, 'Other')
+
+    const balanced = await parentAgent.get('/api/parent/overview')
+    expect(balanced.body.data.conversationPrompt.signalType).not.toBe('category_dominant')
+
+    // The teen records two large Entertainment decisions, exactly as the What-If Simulator does.
+    await spend(80, 'Entertainment')
+    await spend(80, 'Entertainment')
+
+    const dominated = await parentAgent.get('/api/parent/overview')
+    const prompt = dominated.body.data.conversationPrompt
+    expect(prompt.signalType).toBe('category_dominant')
+    expect(prompt.category).toBe('Entertainment')
+    expect(prompt.evidence).toMatchObject({ amount: 160, share: 66, transactionCount: 2 })
+    expect(prompt.insight).toContain('Entertainment')
+    expect(prompt.insight).toContain('66%')
+    expect(dominated.body.data.spendingSignal.window.days).toBe(30)
+
+    // Same pattern on the next load: one prompt, numbers kept current, no duplicate rows.
+    const again = await parentAgent.get('/api/parent/overview')
+    expect(again.body.data.conversationPrompt.id).toBe(prompt.id)
+
+    const dismissal = await parentAgent.patch(`/api/prompts/${prompt.id}`).send({ status: 'dismissed' })
+    expect(dismissal.status).toBe(200)
+
+    const afterDismissal = await parentAgent.get('/api/parent/overview')
+    const next = afterDismissal.body.data.conversationPrompt
+    expect(next.id).not.toBe(prompt.id)
+    expect(next.signalType).not.toBe('category_dominant')
+
+    const history = await parentAgent.get('/api/prompts')
+    expect(history.body.data.prompts.map((entry) => entry.status).sort()).toEqual([
+      'active',
+      'dismissed',
+      'superseded',
+    ])
   })
 
   it('hides unshared household categories and invite details from a teen', async () => {

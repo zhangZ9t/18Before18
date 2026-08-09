@@ -22,9 +22,10 @@ Never restate the question, greet the user, or add a sign-off.`
 
 export const SPENDING_DISCUSSION_INSTRUCTIONS = `${COACH_GUARDRAILS}
 
-You are given one week of the teenager's category-level spending plus a precomputed analysis.
+You are given the teenager's recent category-level spending, a precomputed analysis, and the one pattern that was detected as most worth discussing.
+Write about that detected pattern; do not pick a different angle.
 Merchant and product detail is deliberately withheld, so never guess or invent specific purchases.
-Use the supplied percentages and totals exactly as given; do not recalculate or round them differently.
+Use the supplied percentages, totals, and time window exactly as given; do not recalculate or round them differently.
 
 Reply with exactly these three labelled lines and nothing else:
 SUMMARY: one sentence naming the clearest habit, including the percentage and category when one stands out.
@@ -281,7 +282,12 @@ export function createAiService({
 
   async function generateSpendingDiscussion(user) {
     const context = await contextLoader(user)
-    const analysis = summariseSpending(context.spendingByCategory)
+    const signal = context.spendingSignal ?? null
+    // Prefer the detector's window so the wording and the numbers describe the same period.
+    const analysis = {
+      ...summariseSpending(signal?.categories ?? context.spendingByCategory),
+      windowDays: signal?.window?.days ?? null,
+    }
 
     if (!context.teen) {
       return {
@@ -290,6 +296,7 @@ export function createAiService({
           'Share the household invite code to start seeing category-level spending. Patterns worth discussing appear once the first transactions are recorded.',
         suggestedQuestion: '',
         analysis,
+        teenId: null,
         mode: 'fallback',
       }
     }
@@ -297,7 +304,8 @@ export function createAiService({
     const input = `User role: ${user.role}
 Permitted financial context: ${JSON.stringify(context)}
 Precomputed spending analysis: ${JSON.stringify(analysis)}
-Task: summarise how the teenager is spending and what the parent should discuss with them this week.`
+Detected pattern to write about: ${JSON.stringify(signal?.top ?? null)}
+Task: summarise how the teenager is spending and what the parent should discuss with them now.`
 
     for (const provider of providers) {
       try {
@@ -310,7 +318,7 @@ Task: summarise how the teenager is spending and what the parent should discuss 
         )
 
         if (parsed) {
-          return { ...parsed, analysis, mode: provider.name }
+          return { ...parsed, analysis, teenId: context.teen.id, mode: provider.name }
         }
       } catch {
         // Try the next configured provider before using the deterministic fallback.
@@ -320,6 +328,7 @@ Task: summarise how the teenager is spending and what the parent should discuss 
     return {
       ...fallbackSpendingDiscussion(context, analysis),
       analysis,
+      teenId: context.teen.id,
       mode: 'fallback',
     }
   }

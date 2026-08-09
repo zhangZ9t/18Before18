@@ -285,15 +285,7 @@ async function seed() {
     },
   })
 
-  await ConversationPrompt.create({
-    householdId: household.id,
-    teenId: teen.id,
-    weekStart,
-    insight: 'Alex used 65% of their flexible budget during the first two days this week.',
-    suggestedQuestion:
-      'If an unexpected expense came up tomorrow, what would you change?',
-    status: 'active',
-  })
+  // Conversation prompts are detected from the seeded transactions on the first parent load.
 
   console.log('Demo data seeded successfully.')
   console.log('Parent: parent@example.com / DemoParent123!')
