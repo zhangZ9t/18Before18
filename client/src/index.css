@@ -1,15 +1,19 @@
 :root {
-  --ink: #1e1c27;
-  --muted: #74717f;
-  --surface: #f7f6f2;
-  --line: #e4e2dd;
+  --ink: #1f142b;
+  --muted: #6f6379;
+  --surface: #fbf7f2;
+  --line: #e8dff0;
   --lime: #d4f46a;
   --coral: #ff8069;
   --coral-soft: #ffe6e0;
-  --violet: #745cff;
-  --violet-soft: #ebe7ff;
-  --body: Inter, Avenir, 'Segoe UI', system-ui, sans-serif;
-  --display: 'Avenir Next', Avenir, Inter, 'Segoe UI', system-ui, sans-serif;
+  --violet: #663388;
+  --violet-soft: #f0e7f7;
+  --sky: #4293ea;
+  --orchid: #c259a3;
+  --sun: #e1be5d;
+  --orange: #e4864a;
+  --body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: Inter, 'Avenir Next', Avenir, ui-sans-serif, system-ui, sans-serif;
   font-family: var(--body);
   color: var(--ink);
   background: var(--surface);
@@ -34,9 +38,15 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 5% 5%, rgba(212, 244, 106, 0.18), transparent 27rem),
-    radial-gradient(circle at 100% 35%, rgba(116, 92, 255, 0.09), transparent 32rem),
+    radial-gradient(circle at 7% 2%, rgba(66, 147, 234, 0.18) 0, transparent 24rem),
+    radial-gradient(circle at 95% 14%, rgba(194, 89, 163, 0.16) 0, transparent 26rem),
+    radial-gradient(circle at 50% 42%, rgba(225, 190, 93, 0.1) 0, transparent 30rem),
     var(--surface);
+}
+
+::selection {
+  background: rgba(225, 190, 93, 0.55);
+  color: var(--ink);
 }
 
 button,
@@ -44,9 +54,4 @@ input,
 textarea,
 select {
   font: inherit;
-}
-
-::selection {
-  background: var(--lime);
-  color: var(--ink);
 }
