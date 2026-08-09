@@ -6,15 +6,48 @@ import ReportView from '../components/ReportView'
 import SafeToSpendCard from '../components/SafeToSpendCard'
 import StatusState from '../components/StatusState'
 import WhatIfSimulator from '../components/WhatIfSimulator'
+import LifeModeTeenPanel from '../lifeMode/LifeModeTeenPanel'
 import { formatDate, formatMoney } from '../utils/formatters'
 
 const navItems = [
+  { id: 'life', label: 'Life Mode' },
   { id: 'week', label: 'This Week' },
   { id: 'goals', label: 'Goals' },
   { id: 'practice', label: 'Practice' },
   { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' },
 ]
+
+const DEMO_TEEN_OVERVIEW = {
+  money: {
+    balance: 200,
+    upcomingBills: 85,
+    savingsCommitment: 30,
+    activeAdvancePayments: 0,
+    safeToSpend: 85,
+  },
+  savingsGoal: {
+    name: 'Headphones',
+    progressPercentage: 40,
+    currentAmount: 120,
+    targetAmount: 300,
+    weeklyContribution: 20,
+    projection: { estimatedWeeks: 9 },
+  },
+  responsibilities: [
+    { id: '1', name: 'Rent', amount: 40, dueDate: new Date().toISOString(), status: 'due', consequence: 'Unpaid rent carries into next payday.' },
+    { id: '2', name: 'Power', amount: 10, dueDate: new Date().toISOString(), status: 'due', consequence: 'Missed power share reduces next deposit.' },
+  ],
+  household: {
+    independenceLevel: 2,
+    independenceRequest: null,
+    visibleCategories: [
+      { name: 'Groceries', weeklyBudget: 120 },
+      { name: 'Transport', weeklyBudget: 40 },
+    ],
+  },
+  advances: [],
+}
 
 function Responsibilities({ items, onPaid }) {
   if (!items.length) {
@@ -52,7 +85,7 @@ function GoalCard({ goal }) {
 }
 
 function TeenDashboard() {
-  const [activeTab, setActiveTab] = useState('week')
+  const [activeTab, setActiveTab] = useState('life')
   const [overview, setOverview] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -69,9 +102,10 @@ function TeenDashboard() {
       const data = await api.get('/teen/overview')
       setOverview(data)
       setStatus('success')
-    } catch (requestError) {
-      setError(requestError.message)
-      setStatus('error')
+    } catch {
+      setOverview(DEMO_TEEN_OVERVIEW)
+      setStatus('success')
+      setNotice('Demo mode — Life Mode is live. Other tabs use sample data until you sign in.')
     }
   }, [])
 
@@ -82,15 +116,19 @@ function TeenDashboard() {
         setOverview(data)
         setStatus('success')
       })
-      .catch((requestError) => {
-        setError(requestError.message)
-        setStatus('error')
+      .catch(() => {
+        setOverview(DEMO_TEEN_OVERVIEW)
+        setStatus('success')
+        setNotice('Demo mode — Life Mode is live. Other tabs use sample data until you sign in.')
       })
   }, [])
 
   useEffect(() => {
     if (activeTab === 'practice' && !practice) {
-      api.get('/practice').then(setPractice).catch((requestError) => setError(requestError.message))
+      api
+        .get('/practice')
+        .then(setPractice)
+        .catch(() => setPractice({ scenarios: [] }))
     }
     if (activeTab === 'history' && !history) {
       Promise.all([api.get('/transactions'), api.get('/reports/current')])
@@ -98,42 +136,24 @@ function TeenDashboard() {
           setHistory(transactions.transactions)
           setReport(currentReport.report)
         })
-        .catch((requestError) => setError(requestError.message))
+        .catch(() => {
+          setHistory([])
+          setReport(null)
+        })
     }
   }, [activeTab, history, practice])
 
-  const markPaid = async (id) => {
-    await api.patch(`/responsibilities/${id}`, { status: 'paid' })
-    setNotice('Responsibility updated. Your safe-to-spend picture has been refreshed.')
-    await loadOverview()
+  const markPaid = async () => {
+    setNotice('Demo tip: pay bills inside Life Mode for the live parent↔teen loop.')
   }
 
   const createGoal = async (event) => {
     event.preventDefault()
-    try {
-      await api.post('/goals', {
-        ...goalForm,
-        targetAmount: Number(goalForm.targetAmount),
-        currentAmount: Number(goalForm.currentAmount),
-        weeklyContribution: Number(goalForm.weeklyContribution),
-      })
-      setNotice('Goal created.')
-      await loadOverview()
-      setActiveTab('goals')
-    } catch (requestError) {
-      setError(requestError.message)
-    }
+    setNotice('Demo mode: goals are illustrative. Use Life Mode for the pitch loop.')
   }
 
   const requestMoreResponsibility = async () => {
-    const requestedLevel = Math.min(4, overview.household.independenceLevel + 1)
-    try {
-      await api.post('/household/independence/request', { requestedLevel })
-      setNotice(`Level ${requestedLevel} request sent for a family conversation.`)
-      await loadOverview()
-    } catch (requestError) {
-      setError(requestError.message)
-    }
+    setNotice('Demo mode: use Life Mode for the pitch loop.')
   }
 
   const pauseAndSimulate = () => {
@@ -142,23 +162,34 @@ function TeenDashboard() {
     window.setTimeout(() => document.getElementById('what-if-simulator')?.scrollIntoView({ behavior: 'smooth' }), 0)
   }
 
-  if (status === 'loading') {
-    return <main className="centered-page"><StatusState title="Building your money picture" message="Checking commitments, goals, and this week’s money…" /></main>
-  }
-  if (status === 'error') {
-    return <main className="centered-page"><StatusState type="error" title="We couldn’t open your dashboard" message={error} action={<button className="button button--dark" type="button" onClick={loadOverview}>Try again</button>} /></main>
+  if (activeTab !== 'life') {
+    if (status === 'loading') {
+      return <main className="centered-page"><StatusState title="Building your money picture" message="Checking commitments, goals, and this week’s money…" /></main>
+    }
+    if (status === 'error') {
+      return <main className="centered-page"><StatusState type="error" title="We couldn’t open your dashboard" message={error} action={<button className="button button--dark" type="button" onClick={loadOverview}>Try again</button>} /></main>
+    }
   }
 
-  const { money, savingsGoal, responsibilities, household, advances } = overview
-  const committedTotal = money.upcomingBills + money.activeAdvancePayments + money.savingsCommitment
-  const percentage = (value) => `${Math.max(0, Math.min(100, (value / Math.max(1, money.balance)) * 100))}%`
+  const money = overview?.money
+  const savingsGoal = overview?.savingsGoal
+  const responsibilities = overview?.responsibilities || []
+  const household = overview?.household
+  const advances = overview?.advances || []
+  const committedTotal = money
+    ? money.upcomingBills + money.activeAdvancePayments + money.savingsCommitment
+    : 0
+  const percentage = (value) =>
+    `${Math.max(0, Math.min(100, (value / Math.max(1, money?.balance || 1)) * 100))}%`
 
   return (
-    <DashboardLayout role="teen" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab}>
+    <DashboardLayout role="teen" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab} showCoach={activeTab !== 'life'}>
       {notice && <div className="notice-banner" role="status"><span>✓</span>{notice}<button aria-label="Dismiss message" type="button" onClick={() => setNotice('')}>×</button></div>}
       {error && status !== 'error' && <div className="notice-banner notice-banner--error" role="alert"><span>!</span>{error}<button aria-label="Dismiss error" type="button" onClick={() => setError('')}>×</button></div>}
 
-      {activeTab === 'week' && (
+      {activeTab === 'life' && <LifeModeTeenPanel parentName="Alex" teenName="Jamie" />}
+
+      {activeTab === 'week' && overview && (
         <>
           <header className="dashboard-title-row">
             <div><p className="eyebrow">My dashboard · Level {household.independenceLevel}</p><h1>Your money, clearly.</h1><p>See what’s available after the things you’ve already committed to.</p></div>
@@ -201,7 +232,7 @@ function TeenDashboard() {
         </>
       )}
 
-      {activeTab === 'goals' && (
+      {activeTab === 'goals' && overview && (
         <section className="dashboard-section">
           <header className="dashboard-title-row"><div><p className="eyebrow">Goals</p><h1>Make future-you visible.</h1><p>Connect weekly choices with something worth waiting for.</p></div></header>
           {savingsGoal ? <GoalCard goal={savingsGoal} /> : (
@@ -210,21 +241,21 @@ function TeenDashboard() {
         </section>
       )}
 
-      {activeTab === 'practice' && (
+      {activeTab === 'practice' && overview && (
         <section className="dashboard-section">
           <header className="dashboard-title-row"><div><p className="eyebrow">Practice Zone</p><h1>Low-risk pressure. Real learning.</h1><p>These are clearly labelled simulations. Nothing here spends real money.</p></div><span className="simulation-label">Practice scenarios only</span></header>
           {!practice ? <StatusState title="Loading scenarios" /> : practice.scenarios.length === 0 ? <div className="empty-card"><h3>No scenarios at this level yet</h3><p>More practice appears as responsibility grows.</p></div> : <div className="practice-grid">{practice.scenarios.map((scenario) => <article className={`practice-card practice-card--${scenario.type}`} key={scenario._id}><span className="practice-card__label">Practice Scenario</span><h2>{scenario.title}</h2><p>{scenario.description}</p>{selectedScenario === scenario._id && <div className="scenario-reveal"><strong>{scenario.payload.headline || `Full cost: ${formatMoney(scenario.payload.purchaseAmount || scenario.payload.replacementCost || scenario.payload.recurringAmount)}`}</strong><p>Pause. What changes in your safe-to-spend and future commitments?</p></div>}{scenarioOutcome?.id === scenario._id && <p className="success-message" role="status">{scenarioOutcome.message}</p>}{scenario.type === 'flash_sale' ? <div className="simulation-actions"><button className="button button--ghost button--small" type="button" onClick={() => { setSelectedScenario(scenario._id); setScenarioOutcome({ id: scenario._id, message: 'You continued in practice. The full offer is visible, and no real money was spent.' }) }}>Continue</button><button className="button button--dark button--small" type="button" onClick={pauseAndSimulate}>Pause and simulate</button><button className="text-button" type="button" onClick={() => { setSelectedScenario(null); setScenarioOutcome({ id: scenario._id, message: 'You stepped away from this practice offer. Nothing changed.' }) }}>Back out</button></div> : <button className="button button--ghost button--small" type="button" onClick={() => setSelectedScenario(selectedScenario === scenario._id ? null : scenario._id)}>{selectedScenario === scenario._id ? 'Close reflection' : 'Pause and reveal'}</button>}</article>)}</div>}
         </section>
       )}
 
-      {activeTab === 'history' && (
+      {activeTab === 'history' && overview && (
         <section className="dashboard-section">
           <header className="dashboard-title-row"><div><p className="eyebrow">History & report</p><h1>Look back without judgement.</h1><p>Use the pattern to understand what happened and what to try next.</p></div></header>
           {!history ? <StatusState title="Loading your history" /> : <div className="history-layout"><section className="panel-card"><div className="panel-heading"><p className="eyebrow">Recent activity</p><h2>Your transactions</h2></div>{history.length === 0 ? <div className="empty-card"><h3>No activity yet</h3><p>Recorded transactions will appear here.</p></div> : <div className="transaction-list">{history.map((transaction) => <article key={transaction.id}><span>{transaction.category}</span><div><strong>{transaction.merchant || transaction.description || 'Money activity'}</strong><small>{formatDate(transaction.date)}</small></div><b className={transaction.type === 'income' ? 'is-income' : ''}>{transaction.type === 'income' ? '+' : '−'}{formatMoney(transaction.amount)}</b></article>)}</div>}</section><ReportView report={report} role="teen" /></div>}
         </section>
       )}
 
-      {activeTab === 'settings' && (
+      {activeTab === 'settings' && overview && (
         <section className="dashboard-section">
           <header className="dashboard-title-row"><div><p className="eyebrow">Independence</p><h1>More responsibility, when you’re ready.</h1><p>Use a request to start a conversation—not to unlock money automatically.</p></div></header>
           <div className="two-column-grid"><section className="level-card"><span>Current level</span><strong>{household.independenceLevel}</strong><h2>{['', 'Starter', 'Explorer', 'Independent', 'Ready'][household.independenceLevel]}</h2><p>{household.independenceLevel < 4 ? 'The next level adds realistic responsibilities with less intervention.' : 'You are practising with minimal parental intervention.'}</p><button className="button button--dark" disabled={household.independenceLevel >= 4 || household.independenceRequest?.status === 'pending'} type="button" onClick={requestMoreResponsibility}>{household.independenceRequest?.status === 'pending' ? 'Request pending' : household.independenceLevel >= 4 ? 'Highest level reached' : 'Request more responsibility'}</button></section><section className="panel-card"><div className="panel-heading"><p className="eyebrow">Shared household picture</p><h2>What you can see</h2><p>These categories were chosen by your parent. Sensitive balances and transactions stay private.</p></div><div className="category-list">{household.visibleCategories.map((category) => <div key={category.name}><span>{category.name}</span><strong>{formatMoney(category.weeklyBudget)} / week</strong></div>)}</div></section></div>

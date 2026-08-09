@@ -77,8 +77,8 @@ function LandingPage() {
         <nav aria-label="Landing navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#different">Why it’s different</a>
-          <Link to="/login">Sign in</Link>
-          <Link className="button button--dark button--small" to="/signup">Start a household</Link>
+          <Link to="/teen">Teen demo</Link>
+          <Link className="button button--dark button--small" to="/parent">Parent demo</Link>
         </nav>
       </header>
 
@@ -92,10 +92,11 @@ function LandingPage() {
               future consequences, and better family conversations.
             </p>
             <div className="hero-actions">
-              <Link className="button button--dark" to="/signup">Create your household <span>→</span></Link>
+              <Link className="button button--dark" to="/parent">Start parent demo <span>→</span></Link>
+              <Link className="button button--ghost" to="/teen">Open teen demo</Link>
               <a className="button button--ghost" href="#product-demo">See how it works</a>
             </div>
-            <p className="trust-line"><span>✓</span> Not a parental-control app. No real credit or banking in the MVP.</p>
+            <p className="trust-line"><span>✓</span> Shared Life Mode: Parent starts the week → Teen manages money → Parent gets the coaching alert.</p>
           </div>
           <div className="hero-section__visual">
             <div className="orbit orbit--one" />
@@ -175,7 +176,8 @@ function LandingPage() {
           <p className="eyebrow">Start learning together</p>
           <h2>Give money decisions room to be practised.</h2>
           <div className="hero-actions">
-            <Link className="button button--lime" to="/signup">Create a parent account <span>→</span></Link>
+            <Link className="button button--lime" to="/parent">Open parent Life Mode <span>→</span></Link>
+            <Link className="button button--ghost" to="/teen">Open teen Life Mode</Link>
             <Link className="button button--light" to="/join">Join with an invite code</Link>
           </div>
         </section>

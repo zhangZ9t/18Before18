@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
-import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import AuthPage from './pages/AuthPage'
 import LandingPage from './pages/LandingPage'
@@ -16,23 +15,10 @@ function App() {
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="parent" />} />
         <Route path="/join" element={<AuthPage mode="teen" />} />
-        <Route
-          path="/parent"
-          element={
-            <ProtectedRoute role="parent">
-              <ParentDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/teen"
-          element={
-            <ProtectedRoute role="teen">
-              <TeenDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/dashboard" element={<Navigate to="/login" replace />} />
+        <Route path="/parent" element={<ParentDashboard />} />
+        <Route path="/teen" element={<TeenDashboard />} />
+        <Route path="/tenant" element={<Navigate to="/teen" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/parent" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>
