@@ -48,6 +48,10 @@ function ParentDashboard() {
       const data = await api.post('/ai/spending-discussion')
       setAdvice(data.discussion)
       setAdviceStatus('success')
+      // The server stores this wording on the prompt, so mirror it without another round trip.
+      if (data.discussion.mode !== 'fallback') {
+        setOverview((current) => (current?.conversationPrompt ? { ...current, conversationPrompt: { ...current.conversationPrompt, insight: data.discussion.summary, suggestedQuestion: data.discussion.suggestedQuestion || current.conversationPrompt.suggestedQuestion, mode: data.discussion.mode } } : current))
+      }
     } catch (requestError) {
       setError(requestError.message)
       setAdviceStatus('error')
@@ -65,8 +69,8 @@ function ParentDashboard() {
           depositFrequency: data.household.depositFrequency,
         })
         setStatus('success')
-        // A week with no stored prompt would otherwise leave the card empty.
-        if (data.teen && !data.conversationPrompt) loadAdvice()
+        // One coach rewrite per detected pattern: prompts already carrying it are left alone.
+        if (data.teen && data.conversationPrompt?.mode !== 'gemini') loadAdvice()
       })
       .catch((requestError) => {
         setError(requestError.message)
@@ -82,7 +86,10 @@ function ParentDashboard() {
 
   const updatePrompt = async (promptStatus) => {
     await api.patch(`/prompts/${overview.conversationPrompt.id}`, { status: promptStatus })
-    setNotice(promptStatus === 'discussed' ? 'Conversation marked as discussed.' : 'Prompt dismissed for this week.')
+    setNotice(promptStatus === 'discussed' ? 'Conversation marked as discussed.' : 'Prompt dismissed. The next pattern will take its place.')
+    // The next-ranked signal becomes the prompt, so the old analysis no longer describes it.
+    setAdvice(null)
+    setAdviceStatus('idle')
     await loadOverview()
   }
 
@@ -193,12 +200,13 @@ function ParentDashboard() {
 
               {advice && (
                 <div className="conversation-card__analysis">
-                  {overview.conversationPrompt && <><span className="conversation-card__try">Spending pattern</span><p className="conversation-card__summary">{advice.summary}</p></>}
+                  {overview.conversationPrompt && advice.summary !== overview.conversationPrompt.insight && <><span className="conversation-card__try">Spending pattern</span><p className="conversation-card__summary">{advice.summary}</p></>}
                   {advice.analysis.total > 0 && (
                     <div className="conversation-card__facts">
                       <span>{formatMoney(advice.analysis.total)} spent</span>
                       {advice.analysis.topCategory && <span>{advice.analysis.topCategory} · {advice.analysis.topShare}%</span>}
                       <span>{advice.analysis.categoryCount} categor{advice.analysis.categoryCount === 1 ? 'y' : 'ies'}</span>
+                      {advice.analysis.windowDays && <span>last {advice.analysis.windowDays} days</span>}
                     </div>
                   )}
                   <p>{advice.discussion}</p>

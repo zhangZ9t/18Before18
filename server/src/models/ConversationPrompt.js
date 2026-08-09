@@ -26,13 +26,43 @@ const conversationPromptSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'discussed', 'dismissed'],
+      enum: ['active', 'discussed', 'dismissed', 'superseded'],
       default: 'active',
       index: true,
     },
-    weekStart: {
+    // Prompts are identified by the spending pattern that produced them, not by a calendar week.
+    signalKey: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    signalType: {
+      type: String,
+      required: true,
+    },
+    category: {
+      type: String,
+      default: null,
+    },
+    // Share or count rounded to the nearest 10, so a prompt survives small drift but not a real shift.
+    bucket: {
+      type: Number,
+      default: 0,
+    },
+    evidence: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    mode: {
+      type: String,
+      enum: ['fallback', 'openai', 'gemini'],
+      default: 'fallback',
+    },
+    detectedAt: {
       type: Date,
       required: true,
+      default: Date.now,
+      index: true,
     },
   },
   { timestamps: true },

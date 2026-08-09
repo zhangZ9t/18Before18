@@ -5,7 +5,7 @@ import { sendSuccess } from '../utils/http.js'
 export async function listPrompts(request, response) {
   const prompts = await ConversationPrompt.find({
     householdId: request.user.householdId,
-  }).sort({ weekStart: -1 })
+  }).sort({ detectedAt: -1 })
   return sendSuccess(response, { prompts })
 }
 
