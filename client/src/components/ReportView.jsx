@@ -30,7 +30,6 @@ function ReportView({ report, role }) {
           {Object.entries(categories || {}).map(([category, amount]) => <div key={category}><span>{category}</span><strong>{formatMoney(amount)}</strong></div>)}
         </div>
         {role === 'teen' && Object.keys(report.sharedHouseholdCategories || {}).length > 0 && <><p className="eyebrow">Household categories shared with you</p><div className="category-list category-list--compact">{Object.entries(report.sharedHouseholdCategories).map(([category, amount]) => <div key={category}><span>{category}</span><strong>{formatMoney(amount)} / week</strong></div>)}</div></>}
-        {role === 'parent' && report.conversationPrompt && <div className="learning-note"><span>✦</span><p><strong>Try asking:</strong> {report.conversationPrompt}</p></div>}
       </section>
     </div>
   )
