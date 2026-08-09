@@ -762,6 +762,13 @@ button:disabled {
 .conversation-card h2 { margin: 38px 0 28px; font-family: var(--display); font-size: 30px; line-height: 1.15; letter-spacing: -0.045em; }
 .conversation-card__try { color: rgba(255,255,255,0.48); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 .conversation-card blockquote { margin: 8px 0 25px; color: white; font-family: var(--display); font-size: 20px; line-height: 1.5; }
+.conversation-card__analysis { margin: 0 0 25px; color: rgba(255,255,255,0.6); font-size: 13px; line-height: 1.6; }
+.conversation-card__analysis p { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
+.conversation-card__analysis p.conversation-card__summary { margin: 8px 0 16px; color: white; font-family: var(--display); font-size: 19px; line-height: 1.4; letter-spacing: -0.02em; }
+.conversation-card__facts { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 16px; }
+.conversation-card__facts span { padding: 6px 10px; border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.72); font-size: 10px; font-weight: 700; }
+.conversation-card__facts span:first-child { border-color: transparent; background: rgba(212,244,106,0.16); color: var(--lime); }
+.conversation-card__mode { margin-left: auto; color: rgba(255,255,255,0.32); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
 .conversation-card > div:last-child { display: flex; align-items: center; gap: 15px; }
 .conversation-card .text-button { color: rgba(255,255,255,0.5); }
 .spending-bars { display: grid; gap: 14px; }

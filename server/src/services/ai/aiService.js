@@ -3,20 +3,35 @@ import { env } from '../../config/env.js'
 import { getParentOverview, getTeenOverview } from '../overview/overviewService.js'
 import { createGeminiProvider } from './providers/geminiProvider.js'
 
-export const COACH_INSTRUCTIONS = `You are an educational family financial coach for 18 Before 18.
+const COACH_GUARDRAILS = `You are an educational family financial coach for 18 Before 18.
 Explain concepts and trade-offs using only the supplied permitted context.
 Do not shame spending or present one decision as morally correct.
 Do not act as a regulated financial adviser.
 Do not tell minors to take out real loans, credit, or restricted financial products.
 Clearly distinguish simulated Family Advances from real BNPL or credit.
 Encourage discussion with a parent for significant decisions.
-Never infer, request, or expose information outside the current user's permissions.
+Never infer, request, or expose information outside the current user's permissions.`
+
+export const COACH_INSTRUCTIONS = `${COACH_GUARDRAILS}
 
 Answer format, which matters as much as the content:
 Reply with at most two short sentences and no more than 40 words in total.
 Lead with the number or the direct answer, then at most one sentence explaining why it matters.
 Write plain conversational text only. Never use markdown, asterisks, underscores, backticks, headings, bullet points, numbered lists, or emoji.
 Never restate the question, greet the user, or add a sign-off.`
+
+export const SPENDING_DISCUSSION_INSTRUCTIONS = `${COACH_GUARDRAILS}
+
+You are given one week of the teenager's category-level spending plus a precomputed analysis.
+Merchant and product detail is deliberately withheld, so never guess or invent specific purchases.
+Use the supplied percentages and totals exactly as given; do not recalculate or round them differently.
+
+Reply with exactly these three labelled lines and nothing else:
+SUMMARY: one sentence naming the clearest habit, including the percentage and category when one stands out.
+DISCUSS: two sentences telling the parent what to raise with their child, framed as curiosity about trade-offs rather than blame or correction.
+ASK: one short question the parent can ask out loud, with no quotation marks.
+
+Write plain text only. Never use markdown, asterisks, underscores, backticks, headings, bullet points, or emoji.`
 
 const MAX_SENTENCES = 3
 const MAX_CHARACTERS = 240
@@ -34,30 +49,37 @@ function stripMarkdown(text) {
     .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?;:]|$)/g, '$1$2')
 }
 
-function clampSentences(text) {
-  const sentences = text.split(/(?<=[.!?])\s+(?=["'“(\d$A-Z])/)
+// Sentence boundaries only, so money amounts such as $12.50 are never split.
+function splitSentences(text) {
+  return text.split(/(?<=[.!?])\s+(?=["'“(\d$A-Z])/)
+}
+
+function clampSentences(text, maxSentences, maxCharacters) {
   let clamped = ''
 
-  for (const sentence of sentences.slice(0, MAX_SENTENCES)) {
+  for (const sentence of splitSentences(text).slice(0, maxSentences)) {
     const next = clamped ? `${clamped} ${sentence}` : sentence
-    if (clamped && next.length > MAX_CHARACTERS) break
+    if (clamped && next.length > maxCharacters) break
     clamped = next
   }
 
-  if (clamped.length <= MAX_CHARACTERS) return clamped
+  if (clamped.length <= maxCharacters) return clamped
 
-  const truncated = clamped.slice(0, MAX_CHARACTERS)
+  const truncated = clamped.slice(0, maxCharacters)
   const lastSpace = truncated.lastIndexOf(' ')
-  return `${truncated.slice(0, lastSpace > 0 ? lastSpace : MAX_CHARACTERS).replace(/[,;:]$/, '')}…`
+  return `${truncated.slice(0, lastSpace > 0 ? lastSpace : maxCharacters).replace(/[,;:]$/, '')}…`
 }
 
 // Models drift towards long markdown replies, so the coach panel gets a short plain-text answer.
-export function condenseAnswer(text) {
+export function condenseAnswer(
+  text,
+  { maxSentences = MAX_SENTENCES, maxCharacters = MAX_CHARACTERS } = {},
+) {
   const plain = stripMarkdown(String(text ?? ''))
     .replace(/\s+/g, ' ')
     .trim()
 
-  return plain ? clampSentences(plain) : ''
+  return plain ? clampSentences(plain, maxSentences, maxCharacters) : ''
 }
 
 function safetyIdentifier(userId) {
@@ -105,6 +127,100 @@ function fallbackParentAnswer(context, question) {
   }
 
   return `The Financial Habits Score is ${context.weeklyOverview.habits.score}/100. Treat it as a conversation starter about behaviour, not wealth.`
+}
+
+// Deterministic maths first: the model is asked to phrase these numbers, never to derive them.
+export function summariseSpending(spendingByCategory = []) {
+  const categories = [...spendingByCategory]
+    .filter((entry) => entry?.amount > 0)
+    .sort((left, right) => right.amount - left.amount)
+  const total =
+    Math.round(categories.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100
+  const [top] = categories
+  const share = total > 0 && top ? Math.round((top.amount / total) * 100) : 0
+
+  return {
+    total,
+    categoryCount: categories.length,
+    topCategory: top?.category ?? null,
+    topAmount: top?.amount ?? 0,
+    topShare: share,
+    // One category taking most of the week is the pattern parents most often want to talk about.
+    isConcentrated: share >= 60 && categories.length > 1,
+    categories: categories.map(({ category, amount }) => ({
+      category,
+      amount,
+      share: total > 0 ? Math.round((amount / total) * 100) : 0,
+    })),
+  }
+}
+
+function fallbackSpendingDiscussion(context, analysis) {
+  const firstName = context.teen?.name?.split(' ')[0] ?? 'Your teen'
+
+  if (analysis.total === 0) {
+    return {
+      summary: `No spending recorded for ${firstName} yet.`,
+      discussion: `Ask what ${firstName} is planning to spend on this week and how that fits the weekly deposit. Agreeing the plan before the money moves makes the next review a comparison rather than a verdict.`,
+      suggestedQuestion: 'What are you planning to spend on this week?',
+    }
+  }
+
+  if (analysis.isConcentrated) {
+    return {
+      summary: `${analysis.topShare}% of ${firstName}’s $${analysis.total} went to ${analysis.topCategory}.`,
+      discussion: `That is worth a curious question rather than a correction: ask what ${firstName} gets out of ${analysis.topCategory} and what got squeezed out to pay for it. Then agree together on a share that still leaves room for bills and the savings goal.`,
+      suggestedQuestion: `What did spending that much on ${analysis.topCategory} mean you skipped?`,
+    }
+  }
+
+  return {
+    summary: `${firstName} spent $${analysis.total} across ${analysis.categoryCount} categories, led by ${analysis.topCategory} at ${analysis.topShare}%.`,
+    discussion: `Spending is spread out, so the useful conversation is about intent rather than limits: ask which of those categories felt planned and which felt automatic. Naming the automatic ones is usually where the next habit change comes from.`,
+    suggestedQuestion: 'Which of these felt planned, and which just happened?',
+  }
+}
+
+function readLabelledLine(lines, label) {
+  const prefix = `${label}:`
+  const line = lines.find((entry) => entry.toLowerCase().startsWith(prefix))
+  return line ? line.slice(prefix.length).trim() : ''
+}
+
+function parseSpendingDiscussion(text) {
+  const lines = stripMarkdown(String(text ?? ''))
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) return null
+
+  const summary = condenseAnswer(readLabelledLine(lines, 'summary'), {
+    maxSentences: 1,
+    maxCharacters: 150,
+  })
+  const discussion = condenseAnswer(readLabelledLine(lines, 'discuss'), {
+    maxSentences: 2,
+    maxCharacters: 300,
+  })
+  const suggestedQuestion = condenseAnswer(readLabelledLine(lines, 'ask'), {
+    maxSentences: 1,
+    maxCharacters: 120,
+  }).replace(/^["'“]|["'”]$/g, '')
+
+  if (summary && discussion) return { summary, discussion, suggestedQuestion }
+
+  // The model ignored the labels, so fall back to reading it as prose.
+  const [first, ...rest] = splitSentences(
+    condenseAnswer(lines.join(' '), { maxSentences: 4, maxCharacters: 450 }),
+  )
+  if (!first || rest.length === 0) return null
+
+  return {
+    summary: condenseAnswer(first, { maxSentences: 1, maxCharacters: 150 }),
+    discussion: condenseAnswer(rest.join(' '), { maxSentences: 2, maxCharacters: 300 }),
+    suggestedQuestion: '',
+  }
 }
 
 async function permittedContext(user) {
@@ -163,7 +279,52 @@ export function createAiService({
     return answerFinancialQuestion(user, question)
   }
 
-  return { answerFinancialQuestion, generateInsight }
+  async function generateSpendingDiscussion(user) {
+    const context = await contextLoader(user)
+    const analysis = summariseSpending(context.spendingByCategory)
+
+    if (!context.teen) {
+      return {
+        summary: 'No teenager has joined this household yet.',
+        discussion:
+          'Share the household invite code to start seeing category-level spending. Patterns worth discussing appear once the first transactions are recorded.',
+        suggestedQuestion: '',
+        analysis,
+        mode: 'fallback',
+      }
+    }
+
+    const input = `User role: ${user.role}
+Permitted financial context: ${JSON.stringify(context)}
+Precomputed spending analysis: ${JSON.stringify(analysis)}
+Task: summarise how the teenager is spending and what the parent should discuss with them this week.`
+
+    for (const provider of providers) {
+      try {
+        const parsed = parseSpendingDiscussion(
+          await provider.generate({
+            instructions: SPENDING_DISCUSSION_INSTRUCTIONS,
+            input,
+            safetyIdentifier: safetyIdentifier(user.id),
+          }),
+        )
+
+        if (parsed) {
+          return { ...parsed, analysis, mode: provider.name }
+        }
+      } catch {
+        // Try the next configured provider before using the deterministic fallback.
+      }
+    }
+
+    return {
+      ...fallbackSpendingDiscussion(context, analysis),
+      analysis,
+      mode: 'fallback',
+    }
+  }
+
+  return { answerFinancialQuestion, generateInsight, generateSpendingDiscussion }
 }
 
 const defaultAiService = createAiService({
@@ -175,3 +336,4 @@ const defaultAiService = createAiService({
 
 export const answerFinancialQuestion = defaultAiService.answerFinancialQuestion
 export const generateInsight = defaultAiService.generateInsight
+export const generateSpendingDiscussion = defaultAiService.generateSpendingDiscussion

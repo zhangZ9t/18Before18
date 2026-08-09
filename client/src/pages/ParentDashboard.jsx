@@ -21,6 +21,8 @@ function ParentDashboard() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [report, setReport] = useState(undefined)
+  const [advice, setAdvice] = useState(null)
+  const [adviceStatus, setAdviceStatus] = useState('idle')
   const [responsibilityForm, setResponsibilityForm] = useState({ name: 'Phone plan', category: 'Subscriptions', amount: 15, frequency: 'weekly', dueDate: '', assignedAtIndependenceLevel: 2 })
   const [moneySettings, setMoneySettings] = useState({ weeklyDeposit: '', savingsCommitment: '', depositFrequency: 'weekly' })
 
@@ -40,6 +42,18 @@ function ParentDashboard() {
     }
   }, [])
 
+  const loadAdvice = useCallback(async () => {
+    setAdviceStatus('loading')
+    try {
+      const data = await api.post('/ai/spending-discussion')
+      setAdvice(data.discussion)
+      setAdviceStatus('success')
+    } catch (requestError) {
+      setError(requestError.message)
+      setAdviceStatus('error')
+    }
+  }, [])
+
   useEffect(() => {
     api
       .get('/parent/overview')
@@ -51,12 +65,14 @@ function ParentDashboard() {
           depositFrequency: data.household.depositFrequency,
         })
         setStatus('success')
+        // A week with no stored prompt would otherwise leave the card empty.
+        if (data.teen && !data.conversationPrompt) loadAdvice()
       })
       .catch((requestError) => {
         setError(requestError.message)
         setStatus('error')
       })
-  }, [])
+  }, [loadAdvice])
 
   useEffect(() => {
     if (activeTab === 'reports' && report === undefined) {
@@ -170,7 +186,34 @@ function ParentDashboard() {
           <div className="parent-overview-grid">
             <section className="conversation-card">
               <div className="conversation-card__label"><span>✦</span> Worth discussing</div>
-              {overview.conversationPrompt ? <><h2>{overview.conversationPrompt.insight}</h2><span className="conversation-card__try">Try asking</span><blockquote>“{overview.conversationPrompt.suggestedQuestion}”</blockquote><div><button className="button button--lime button--small" type="button" onClick={() => updatePrompt('discussed')}>Mark as discussed</button><button className="text-button" type="button" onClick={() => updatePrompt('dismissed')}>Dismiss</button></div></> : <><h2>No conversation prompt this week.</h2><p>Everything looks steady. A simple check-in is enough.</p></>}
+
+              {overview.conversationPrompt && <><h2>{overview.conversationPrompt.insight}</h2><span className="conversation-card__try">Try asking</span><blockquote>“{overview.conversationPrompt.suggestedQuestion}”</blockquote></>}
+
+              {!overview.conversationPrompt && <h2>{advice ? advice.summary : adviceStatus === 'loading' ? 'Reading this week’s spending…' : 'No conversation prompt this week.'}</h2>}
+
+              {advice && (
+                <div className="conversation-card__analysis">
+                  {overview.conversationPrompt && <><span className="conversation-card__try">Spending pattern</span><p className="conversation-card__summary">{advice.summary}</p></>}
+                  {advice.analysis.total > 0 && (
+                    <div className="conversation-card__facts">
+                      <span>{formatMoney(advice.analysis.total)} spent</span>
+                      {advice.analysis.topCategory && <span>{advice.analysis.topCategory} · {advice.analysis.topShare}%</span>}
+                      <span>{advice.analysis.categoryCount} categor{advice.analysis.categoryCount === 1 ? 'y' : 'ies'}</span>
+                    </div>
+                  )}
+                  <p>{advice.discussion}</p>
+                </div>
+              )}
+
+              {!overview.conversationPrompt && !advice && <p className="conversation-card__analysis">{adviceStatus === 'loading' ? 'The coach is checking category patterns for one thing worth raising.' : 'Everything looks steady. Ask the coach to read this week’s spending for a starting point.'}</p>}
+
+              {!overview.conversationPrompt && advice?.suggestedQuestion && <><span className="conversation-card__try">Try asking</span><blockquote>“{advice.suggestedQuestion}”</blockquote></>}
+
+              <div>
+                {overview.conversationPrompt && <><button className="button button--lime button--small" type="button" onClick={() => updatePrompt('discussed')}>Mark as discussed</button><button className="text-button" type="button" onClick={() => updatePrompt('dismissed')}>Dismiss</button></>}
+                <button className="text-button" disabled={adviceStatus === 'loading'} type="button" onClick={loadAdvice}>{adviceStatus === 'loading' ? 'Analysing…' : advice ? 'Refresh analysis' : 'Analyse spending'}</button>
+                {advice && <span className="conversation-card__mode">{advice.mode === 'fallback' ? 'Offline summary' : 'AI summary'}</span>}
+              </div>
             </section>
 
             <section className="panel-card"><div className="panel-heading panel-heading--split"><div><p className="eyebrow">Privacy-aware spending</p><h2>By category</h2></div><span className="privacy-badge">No merchants</span></div>{overview.spendingByCategory.length === 0 ? <div className="empty-card"><h3>No spending yet</h3><p>Category patterns will appear after transactions are recorded.</p></div> : <div className="spending-bars">{overview.spendingByCategory.map(({ category, amount }) => <div key={category}><span>{category}</span><div><i style={{ width: `${(amount / maxCategory) * 100}%` }} /></div><strong>{formatMoney(amount)}</strong></div>)}</div>}<p className="privacy-note">Merchant and product details are deliberately excluded from this view.</p></section>
