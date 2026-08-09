@@ -23,7 +23,8 @@ export const authLimiter = rateLimit({
 export const aiLimiter = rateLimit({
   ...sharedOptions,
   windowMs: 60 * 1000,
-  limit: 20,
+  // Hackathon / local demos hammer the coach; keep production tighter.
+  limit: env.NODE_ENV === 'production' ? 20 : 200,
   message: {
     success: false,
     error: {

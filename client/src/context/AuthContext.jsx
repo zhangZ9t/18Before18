@@ -24,8 +24,7 @@ export function AuthProvider({ children }) {
     api
       .get('/auth/me')
       .then((data) => setUser(data.user))
-      .catch((error) => {
-        if (!(error instanceof ApiError) || error.status !== 401) return
+      .catch(() => {
         setUser(null)
       })
       .finally(() => setLoading(false))

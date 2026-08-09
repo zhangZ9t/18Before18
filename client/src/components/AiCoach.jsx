@@ -14,6 +14,33 @@ const suggestions = {
   ],
 }
 
+const localAnswers = {
+  teen: {
+    'Why is my safe-to-spend lower than my balance?':
+      'Balance is what’s in the account. Safe-to-spend is what’s left after bills and savings you already promised. Protect commitments first — then enjoy what’s free.',
+    'How long until I reach my goal?':
+      'Divide what’s left to save by your weekly contribution. Life Mode also shows how a loan or early spend can push that date out.',
+    'What does a Family Advance mean?':
+      'It’s practice credit from your parent — money now, paid back from future paydays. Not a discount. In Life Mode, apply for a loan to feel that trade-off.',
+  },
+  parent: {
+    'What should we discuss this week?':
+      'Start from one concrete moment: unpaid bills, a loan, or early card spend. Life Mode → End week gives you What / Why / How for that conversation.',
+    'Why did safe-to-spend decrease?':
+      'Usually new commitments (bills, savings, or a loan repayment) claimed money that looked free. Ask what they thought was “extra” vs already spoken for.',
+    'How should I think about the next level?':
+      'Add responsibility when they can name the trade-off — not when the balance looks big. One new bill after a strong week beats three at once.',
+  },
+}
+
+function fallbackAnswer(role, question) {
+  const map = localAnswers[role] || {}
+  if (map[question]) return map[question]
+  return role === 'parent'
+    ? 'Try Life Mode: Start week → switch to Teen → End week. You’ll get a coaching brief with what happened, why it matters, and how to talk about it.'
+    : 'Your balance isn’t the same as spendable money. Pay bills first in Life Mode — unpaid amounts come out of next payday.'
+}
+
 function AiCoach({ role }) {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState('')
@@ -31,9 +58,9 @@ function AiCoach({ role }) {
       const data = await api.post('/ai/chat', { question: nextQuestion })
       setAnswer(data.answer.text)
       setStatus('success')
-    } catch (error) {
-      setAnswer(error.message)
-      setStatus('error')
+    } catch {
+      setAnswer(fallbackAnswer(role, nextQuestion))
+      setStatus('success')
     }
   }
 

@@ -1,10 +1,21 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import Logo from './Logo'
+import AiCoach from './AiCoach'
 
 function DashboardLayout({ role, navItems, activeTab, onTabChange, children, showCoach = true }) {
-  const displayName = role === 'parent' ? 'Alex' : 'Jamie'
-  const otherRole = role === 'parent' ? 'teen' : 'parent'
-  const otherLabel = role === 'parent' ? 'Teen' : 'Parent'
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const displayName = user?.name || (role === 'parent' ? 'Alex' : 'Jamie')
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch {
+      /* demo / already logged out */
+    }
+    navigate('/')
+  }
 
   return (
     <div className="product-shell">
@@ -23,7 +34,7 @@ function DashboardLayout({ role, navItems, activeTab, onTabChange, children, sho
           ))}
         </nav>
         <div className="profile-menu">
-          <div className="demo-role-switch" aria-label="Switch demo profile">
+          <div className="demo-role-switch" aria-label="Switch profile">
             <Link className={role === 'parent' ? 'is-active' : ''} to="/parent">
               Parent
             </Link>
@@ -32,20 +43,21 @@ function DashboardLayout({ role, navItems, activeTab, onTabChange, children, sho
             </Link>
           </div>
           <span className="profile-menu__copy">
-            <small>Shared Life Mode demo</small>
-            <strong>
-              {displayName} · switch to {otherLabel}
-            </strong>
+            <small>{user ? (role === 'parent' ? 'Parent account' : 'Teen account') : 'Hackathon demo'}</small>
+            <strong>{displayName}</strong>
           </span>
           <span className="profile-menu__avatar" aria-hidden="true">
             {displayName.charAt(0)}
           </span>
-          <Link className="text-button" to={`/${otherRole}`}>
-            → {otherLabel}
-          </Link>
-          <Link className="text-button" to="/">
-            Home
-          </Link>
+          {user ? (
+            <button className="text-button" type="button" onClick={handleLogout}>
+              Log out
+            </button>
+          ) : (
+            <Link className="text-button" to="/">
+              Home
+            </Link>
+          )}
         </div>
       </header>
 
@@ -62,7 +74,7 @@ function DashboardLayout({ role, navItems, activeTab, onTabChange, children, sho
         ))}
       </nav>
 
-      <div className="demo-role-switch demo-role-switch--mobile" aria-label="Switch demo profile">
+      <div className="demo-role-switch demo-role-switch--mobile" aria-label="Switch profile">
         <Link className={role === 'parent' ? 'is-active' : ''} to="/parent">
           Parent
         </Link>
@@ -72,6 +84,7 @@ function DashboardLayout({ role, navItems, activeTab, onTabChange, children, sho
       </div>
 
       <main className="product-main">{children}</main>
+      {showCoach ? <AiCoach role={role} /> : null}
     </div>
   )
 }
