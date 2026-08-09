@@ -1,4 +1,3 @@
-import { ConversationPrompt } from '../../models/ConversationPrompt.js'
 import { FamilyAdvance } from '../../models/FamilyAdvance.js'
 import { Household } from '../../models/Household.js'
 import { Responsibility } from '../../models/Responsibility.js'
@@ -11,6 +10,10 @@ import {
 } from '../../serializers/householdSerializer.js'
 import { serializeParentCategorySpending } from '../../serializers/transactionSerializer.js'
 import { MockBankProvider } from '../bank/MockBankProvider.js'
+import {
+  refreshConversationPrompt,
+  serializeConversationPrompt,
+} from '../insights/conversationPromptService.js'
 import {
   calculateGoalProjection,
   calculateHabitScore,
@@ -134,15 +137,11 @@ export async function getTeenOverview(teen) {
 }
 
 export async function getParentOverview(parent) {
-  const [household, teens, prompt] = await Promise.all([
+  const [household, teens] = await Promise.all([
     Household.findById(parent.householdId),
     User.find({ householdId: parent.householdId, role: 'teen' }).sort({
       createdAt: 1,
     }),
-    ConversationPrompt.findOne({
-      householdId: parent.householdId,
-      status: 'active',
-    }).sort({ weekStart: -1 }),
   ])
 
   const teen = teens[0]
@@ -162,6 +161,13 @@ export async function getParentOverview(parent) {
     getTeenOverview(teen),
     Transaction.find({ householdId: household.id, userId: teen.id }).lean(),
   ])
+  // Recomputed on every load, so the prompt always reflects the transactions as they stand.
+  const { prompt, detection } = await refreshConversationPrompt({
+    householdId: household.id,
+    teenId: teen.id,
+    teenName: teen.name,
+    transactions,
+  })
 
   return {
     household: serializeHouseholdForParent(household),
@@ -180,14 +186,24 @@ export async function getParentOverview(parent) {
       habits: teenOverview.habits,
     },
     spendingByCategory: serializeParentCategorySpending(transactions),
-    conversationPrompt: prompt
-      ? {
-          id: prompt.id,
-          insight: prompt.insight,
-          suggestedQuestion: prompt.suggestedQuestion,
-          status: prompt.status,
-        }
-      : null,
+    spendingSignal: {
+      window: detection.window,
+      totals: {
+        spending: detection.current.total,
+        income: detection.current.income,
+        savings: detection.current.savings,
+        transactionCount: detection.current.transactionCount,
+      },
+      categories: detection.current.categories,
+      top: detection.signals[0] ?? null,
+      detected: detection.signals.map(({ key, type, category, evidence }) => ({
+        key,
+        type,
+        category,
+        evidence,
+      })),
+    },
+    conversationPrompt: serializeConversationPrompt(prompt),
     responsibilities: teenOverview.responsibilities,
     pendingAdvances: await FamilyAdvance.find({
       householdId: household.id,

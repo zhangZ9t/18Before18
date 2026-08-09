@@ -3,6 +3,7 @@ import {
   generateInsight,
   generateSpendingDiscussion,
 } from '../services/ai/aiService.js'
+import { applyPromptWording } from '../services/insights/conversationPromptService.js'
 import { sendSuccess } from '../utils/http.js'
 
 export async function chat(request, response) {
@@ -26,8 +27,21 @@ export async function insight(request, response) {
 }
 
 export async function spendingDiscussion(request, response) {
+  const discussion = await generateSpendingDiscussion(request.user)
+
+  // Written back so the card keeps the coach's wording until the spending pattern itself changes.
+  if (discussion.teenId) {
+    await applyPromptWording({
+      householdId: request.user.householdId,
+      teenId: discussion.teenId,
+      insight: discussion.summary,
+      suggestedQuestion: discussion.suggestedQuestion,
+      mode: discussion.mode,
+    })
+  }
+
   return sendSuccess(response, {
-    discussion: await generateSpendingDiscussion(request.user),
+    discussion,
     disclosure:
       'Category patterns only. Merchant detail stays in the teen’s own view.',
   })
