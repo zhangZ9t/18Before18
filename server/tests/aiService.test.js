@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   COACH_INSTRUCTIONS,
+  SPENDING_DISCUSSION_INSTRUCTIONS,
+  condenseAnswer,
   createAiService,
   selectAiProviders,
+  summariseSpending,
 } from '../src/services/ai/aiService.js'
 import { createGeminiProvider } from '../src/services/ai/providers/geminiProvider.js'
-import { createOpenAiProvider } from '../src/services/ai/providers/openAiProvider.js'
 
 const teenUser = { id: 'teen-user-id', role: 'teen' }
 const teenContext = {
@@ -143,26 +145,131 @@ describe('AI provider adapters', () => {
     })
   })
 
-  it('keeps OpenAI storage disabled and sends the hashed safety identifier', async () => {
-    const create = vi.fn().mockResolvedValue({ output_text: ' OpenAI response ' })
-    const provider = createOpenAiProvider({
-      model: 'openai-test-model',
-      client: { responses: { create } },
+  it('returns no provider when Gemini is not configured', () => {
+    expect(createGeminiProvider({ apiKey: '  ' })).toBeNull()
+    expect(selectAiProviders({ openAiProvider: null, geminiProvider: null })).toEqual([])
+  })
+})
+
+const parentUser = { id: 'parent-user-id', role: 'parent' }
+const parentContext = {
+  teen: { id: 'teen-user-id', name: 'Maya Chen' },
+  weeklyOverview: { safeToSpend: 100, independenceLevel: 2, habits: { score: 72 } },
+  spendingByCategory: [
+    { category: 'Entertainment', amount: 90 },
+    { category: 'Food', amount: 10 },
+  ],
+  conversationPrompt: null,
+}
+
+describe('Spending discussion', () => {
+  it('computes the category concentration without the model', () => {
+    const analysis = summariseSpending(parentContext.spendingByCategory)
+
+    expect(analysis).toMatchObject({
+      total: 100,
+      categoryCount: 2,
+      topCategory: 'Entertainment',
+      topShare: 90,
+      isConcentrated: true,
+    })
+    expect(summariseSpending([])).toMatchObject({ total: 0, topCategory: null, isConcentrated: false })
+    expect(summariseSpending([{ category: 'Food', amount: 12 }]).isConcentrated).toBe(false)
+  })
+
+  it('parses the labelled model reply and keeps each part short', async () => {
+    const geminiProvider = mockProvider(
+      'gemini',
+      async () =>
+        'SUMMARY: **90%** of Maya’s $100 went to Entertainment.\nDISCUSS: Ask what she gets out of it. Then agree a share that protects the goal.\nASK: “What did that spending mean you skipped?”',
+    )
+    const service = createAiService({
+      contextLoader: async () => parentContext,
+      geminiProvider,
     })
 
-    await expect(
-      provider.generate({
-        instructions: 'Shared guardrails',
-        input: 'Context',
-        safetyIdentifier: 'hashed-user-id',
-      }),
-    ).resolves.toBe('OpenAI response')
-    expect(create).toHaveBeenCalledWith({
-      model: 'openai-test-model',
-      instructions: 'Shared guardrails',
-      input: 'Context',
-      safety_identifier: 'hashed-user-id',
-      store: false,
+    const discussion = await service.generateSpendingDiscussion(parentUser)
+
+    expect(discussion.mode).toBe('gemini')
+    expect(discussion.summary).toBe('90% of Maya’s $100 went to Entertainment.')
+    expect(discussion.discussion).toBe(
+      'Ask what she gets out of it. Then agree a share that protects the goal.',
+    )
+    expect(discussion.suggestedQuestion).toBe('What did that spending mean you skipped?')
+    expect(discussion.analysis.topShare).toBe(90)
+
+    const request = geminiProvider.generate.mock.calls[0][0]
+    expect(request.instructions).toBe(SPENDING_DISCUSSION_INSTRUCTIONS)
+    expect(request.input).toContain('"topShare":90')
+  })
+
+  it('falls back to a deterministic concentration summary', async () => {
+    const service = createAiService({ contextLoader: async () => parentContext })
+    const discussion = await service.generateSpendingDiscussion(parentUser)
+
+    expect(discussion.mode).toBe('fallback')
+    expect(discussion.summary).toBe('90% of Maya’s $100 went to Entertainment.')
+    expect(discussion.discussion).toContain('Entertainment')
+    expect(discussion.suggestedQuestion).toBeTruthy()
+  })
+
+  it('handles a household with no spending and no teen', async () => {
+    const noSpending = createAiService({
+      contextLoader: async () => ({ ...parentContext, spendingByCategory: [] }),
     })
+    await expect(noSpending.generateSpendingDiscussion(parentUser)).resolves.toMatchObject({
+      summary: 'No spending recorded for Maya yet.',
+      mode: 'fallback',
+    })
+
+    const geminiProvider = mockProvider('gemini', async () => 'should not be called')
+    const noTeen = createAiService({
+      contextLoader: async () => ({ teen: null, spendingByCategory: [] }),
+      geminiProvider,
+    })
+    await expect(noTeen.generateSpendingDiscussion(parentUser)).resolves.toMatchObject({
+      summary: 'No teenager has joined this household yet.',
+    })
+    expect(geminiProvider.generate).not.toHaveBeenCalled()
+  })
+})
+
+describe('Coach answer formatting', () => {
+  it('strips markdown artifacts from provider answers', async () => {
+    const geminiProvider = mockProvider(
+      'gemini',
+      async () =>
+        '## Safe to spend\n\n**$100** is safe to spend.\n\n- Bills take _$40_\n- Savings take `$20`',
+    )
+    const service = createAiService({
+      contextLoader: async () => teenContext,
+      geminiProvider,
+    })
+
+    const answer = await service.answerFinancialQuestion(teenUser, 'Why?')
+
+    expect(answer.text).not.toMatch(/[*`#]/)
+    expect(answer.text).toBe('Safe to spend $100 is safe to spend. Bills take $40 Savings take $20')
+  })
+
+  it('keeps answers short and never splits money amounts', () => {
+    const long = Array.from(
+      { length: 6 },
+      (_, index) => `Sentence number ${index} explains one more trade-off in detail.`,
+    ).join(' ')
+
+    expect(condenseAnswer(long).length).toBeLessThanOrEqual(240)
+    expect(condenseAnswer(long).split(/(?<=[.!?])\s+/)).toHaveLength(3)
+    expect(condenseAnswer('You have $12.50 left. Spend it well. Then review. And again.')).toBe(
+      'You have $12.50 left. Spend it well. Then review.',
+    )
+  })
+
+  it('condenses the deterministic fallback too', async () => {
+    const service = createAiService({ contextLoader: async () => teenContext })
+    const answer = await service.answerFinancialQuestion(teenUser, 'Why is safe-to-spend lower?')
+
+    expect(answer.text.length).toBeLessThanOrEqual(240)
+    expect(answer.text).toContain('$100 safe to spend')
   })
 })

@@ -128,6 +128,43 @@ describe('authentication and household privacy API', () => {
     expect(JSON.stringify(parentView.body)).not.toContain('Lunch')
   })
 
+  it('gives the parent a spending discussion without exposing merchants', async () => {
+    const { parentAgent, teenAgent } = await registerFamily()
+    await teenAgent.post('/api/transactions').send({
+      amount: 90,
+      type: 'expense',
+      category: 'Entertainment',
+      merchant: 'Steam',
+      description: 'Game bundle',
+    })
+    await teenAgent.post('/api/transactions').send({
+      amount: 10,
+      type: 'expense',
+      category: 'Food',
+      merchant: "McDonald's",
+    })
+
+    expect((await teenAgent.post('/api/ai/spending-discussion')).status).toBe(403)
+
+    const response = await parentAgent.post('/api/ai/spending-discussion')
+    expect(response.status).toBe(200)
+
+    const { discussion } = response.body.data
+    expect(discussion.analysis).toMatchObject({
+      total: 100,
+      topCategory: 'Entertainment',
+      topShare: 90,
+      isConcentrated: true,
+    })
+    // Wording comes from the model when a key is configured, so assert on the facts it must carry.
+    expect(discussion.summary).toContain('90')
+    expect(discussion.summary).toContain('Entertainment')
+    expect(discussion.discussion.length).toBeGreaterThan(0)
+    expect(discussion.summary).not.toMatch(/[*`#]/)
+    expect(JSON.stringify(response.body)).not.toContain('Steam')
+    expect(JSON.stringify(response.body)).not.toContain('Game bundle')
+  })
+
   it('hides unshared household categories and invite details from a teen', async () => {
     const { teenAgent } = await registerFamily()
     const response = await teenAgent.get('/api/household')
