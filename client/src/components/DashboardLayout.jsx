@@ -4,6 +4,7 @@ import Logo from './Logo'
 import AiCoach from './AiCoach'
 
 function DashboardLayout({ role, navItems, activeTab, onTabChange, children, showCoach = true }) {
+  const coachContext = activeTab === 'life' ? 'life' : 'default'
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const displayName = user?.name || (role === 'parent' ? 'Alex' : 'Jamie')
@@ -84,7 +85,7 @@ function DashboardLayout({ role, navItems, activeTab, onTabChange, children, sho
       </div>
 
       <main className="product-main">{children}</main>
-      {showCoach ? <AiCoach role={role} /> : null}
+      {showCoach ? <AiCoach role={role} context={coachContext} /> : null}
     </div>
   )
 }

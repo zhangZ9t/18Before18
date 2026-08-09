@@ -34,6 +34,22 @@ ASK: one short question the parent can ask out loud, with no quotation marks.
 
 Write plain text only. Never use markdown, asterisks, underscores, backticks, headings, bullet points, or emoji.`
 
+export const LIFE_MODE_COACHING_INSTRUCTIONS = `${COACH_GUARDRAILS}
+
+You are coaching a parent after a Life Mode practice week (simulated money only).
+Use only the supplied week snapshot and the local teaching template as factual ground truth.
+Do not invent merchants, purchases, or numbers that are not in the snapshot.
+Focus on judgement, obligations before free spend, debt carry-over, and loans as future money already spent.
+Keep curiosity, not blame. Be practical and direct about what the parent should do next with their teenager.
+
+Reply with exactly these four labelled lines and nothing else:
+SUMMARY: one sentence naming what happened this week, including a key dollar amount from the snapshot.
+DISCUSS: two sentences on why this matters for adult money habits, without shaming.
+HOW: two sentences telling the parent exactly how to handle the conversation — tone, what to open with, and what not to do.
+ASK: one short question the parent can ask out loud, with no quotation marks.
+
+Write plain text only. Never use markdown, asterisks, underscores, backticks, headings, bullet points, or emoji.`
+
 const MAX_SENTENCES = 3
 const MAX_CHARACTERS = 240
 
@@ -204,12 +220,18 @@ function parseSpendingDiscussion(text) {
     maxSentences: 2,
     maxCharacters: 300,
   })
+  const how = condenseAnswer(readLabelledLine(lines, 'how'), {
+    maxSentences: 3,
+    maxCharacters: 360,
+  })
   const suggestedQuestion = condenseAnswer(readLabelledLine(lines, 'ask'), {
     maxSentences: 1,
     maxCharacters: 120,
   }).replace(/^["'“]|["'”]$/g, '')
 
-  if (summary && discussion) return { summary, discussion, suggestedQuestion }
+  if (summary && discussion) {
+    return { summary, discussion, how, suggestedQuestion }
+  }
 
   // The model ignored the labels, so fall back to reading it as prose.
   const [first, ...rest] = splitSentences(
@@ -220,6 +242,7 @@ function parseSpendingDiscussion(text) {
   return {
     summary: condenseAnswer(first, { maxSentences: 1, maxCharacters: 150 }),
     discussion: condenseAnswer(rest.join(' '), { maxSentences: 2, maxCharacters: 300 }),
+    how: '',
     suggestedQuestion: '',
   }
 }
@@ -333,7 +356,86 @@ Task: summarise how the teenager is spending and what the parent should discuss 
     }
   }
 
-  return { answerFinancialQuestion, generateInsight, generateSpendingDiscussion }
+  async function generateLifeModeCoaching(weekSnapshot, { userId = 'life-mode-demo' } = {}) {
+    const fallback = fallbackLifeModeCoaching(weekSnapshot)
+    const input = `Life Mode week snapshot: ${JSON.stringify(weekSnapshot)}
+Task: analyse what the teenager did this week and write the parent coaching prompt using SUMMARY, DISCUSS, HOW, and ASK.`
+
+    for (const provider of providers) {
+      try {
+        const parsed = parseSpendingDiscussion(
+          await provider.generate({
+            instructions: LIFE_MODE_COACHING_INSTRUCTIONS,
+            input,
+            safetyIdentifier: safetyIdentifier(userId),
+          }),
+        )
+
+        if (parsed) {
+          return {
+            ...mapDiscussionToLifeMode(parsed, weekSnapshot),
+            mode: provider.name,
+          }
+        }
+      } catch {
+        // Try the next configured provider before using the deterministic fallback.
+      }
+    }
+
+    return { ...fallback, mode: 'fallback' }
+  }
+
+  return {
+    answerFinancialQuestion,
+    generateInsight,
+    generateSpendingDiscussion,
+    generateLifeModeCoaching,
+  }
+}
+
+function fallbackLifeModeCoaching(weekSnapshot = {}) {
+  const template = weekSnapshot.template || {}
+  const summary =
+    template.preview ||
+    template.what ||
+    'This Life Mode week is ready for a calm family money conversation.'
+  const discussion =
+    template.why ||
+    'Talk about obligations before free spend, and how this week’s choices change next payday.'
+  const how =
+    template.how ||
+    'Keep it calm and curious. Name one concrete moment from the week, ask what they would do differently next payday, then listen before offering a rule.'
+  const suggestedQuestion =
+    (template.how || '').match(/[“"]([^”"]+)[”"]/)?.[1] ||
+    'What would you protect first next payday?'
+
+  return mapDiscussionToLifeMode(
+    { summary, discussion, how, suggestedQuestion },
+    weekSnapshot,
+  )
+}
+
+function mapDiscussionToLifeMode(parsed, weekSnapshot = {}) {
+  const template = weekSnapshot.template || {}
+  const summary = parsed.summary
+  const discussion = parsed.discussion
+  const suggestedQuestion = parsed.suggestedQuestion || ''
+  const how =
+    parsed.how ||
+    (suggestedQuestion
+      ? `Open calmly and ask: “${suggestedQuestion}” Then listen before offering advice.`
+      : template.how || discussion)
+
+  return {
+    summary,
+    discussion,
+    suggestedQuestion,
+    title: template.title || 'Worth a conversation this week',
+    preview: summary,
+    what: summary,
+    why: discussion,
+    how,
+  }
 }
 
 const defaultAiService = createAiService({
@@ -346,3 +448,4 @@ const defaultAiService = createAiService({
 export const answerFinancialQuestion = defaultAiService.answerFinancialQuestion
 export const generateInsight = defaultAiService.generateInsight
 export const generateSpendingDiscussion = defaultAiService.generateSpendingDiscussion
+export const generateLifeModeCoaching = defaultAiService.generateLifeModeCoaching

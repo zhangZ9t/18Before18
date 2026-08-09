@@ -216,12 +216,27 @@ export function PushInbox({ pushes, onToggle }) {
           </div>
           {item.open ? (
             <div className="life-push-card__detail">
+              {item.mode ? (
+                <span className="life-coach-modal__mode life-coach-modal__mode--inline">
+                  {item.aiStatus === 'loading'
+                    ? 'Analysing…'
+                    : item.mode === 'fallback'
+                      ? 'Offline summary'
+                      : 'AI summary'}
+                </span>
+              ) : null}
               <span>What happened</span>
               <p>{item.what}</p>
               <span>Why talk about it</span>
-              <p>{item.why}</p>
+              <p>{item.discussion || item.why}</p>
               <span>How to talk about it</span>
               <p>{item.how}</p>
+              {item.suggestedQuestion ? (
+                <>
+                  <span>Try asking</span>
+                  <p>“{item.suggestedQuestion}”</p>
+                </>
+              ) : null}
             </div>
           ) : null}
         </button>
@@ -230,29 +245,51 @@ export function PushInbox({ pushes, onToggle }) {
   )
 }
 
-export function CoachingAlert({ alert, onClose }) {
+export function CoachingAlert({ alert, onClose, onRefresh, analysing = false }) {
   if (!alert) return null
+  const loading = analysing || alert.aiStatus === 'loading'
+  const mode = alert.mode
   return (
     <div className="life-coach-overlay" role="dialog" aria-modal="true" aria-labelledby="life-coach-title">
       <div className="life-coach-modal">
-        <div className="life-coach-modal__flag">AI parent prompt</div>
-        <h2 id="life-coach-title">{alert.title}</h2>
-        <p className="life-coach-modal__preview">{alert.preview}</p>
+        <div className="life-coach-modal__flag-row">
+          <div className="life-coach-modal__flag">AI parent prompt</div>
+          <span className="life-coach-modal__mode">
+            {loading ? 'Analysing…' : mode === 'gemini' || mode === 'openai' ? 'AI summary' : mode === 'fallback' ? 'Offline summary' : 'Ready'}
+          </span>
+        </div>
+        <h2 id="life-coach-title">{alert.summary || alert.title}</h2>
+        {loading ? (
+          <p className="life-coach-modal__loading">Reading this week’s Life Mode choices…</p>
+        ) : null}
         <div className="life-coach-modal__block">
           <span>What happened</span>
           <p>{alert.what}</p>
         </div>
         <div className="life-coach-modal__block">
           <span>Why talk about it</span>
-          <p>{alert.why}</p>
+          <p>{alert.discussion || alert.why}</p>
         </div>
         <div className="life-coach-modal__block">
           <span>How to talk about it</span>
           <p>{alert.how}</p>
         </div>
-        <button className="life-btn life-btn--accent" type="button" onClick={onClose}>
-          Got it — I’ll talk with them
-        </button>
+        {alert.suggestedQuestion ? (
+          <div className="life-coach-modal__ask">
+            <span>Try asking</span>
+            <blockquote>“{alert.suggestedQuestion}”</blockquote>
+          </div>
+        ) : null}
+        <div className="life-coach-modal__actions">
+          <button className="life-btn life-btn--accent" type="button" onClick={onClose} disabled={loading}>
+            Got it — I’ll talk with them
+          </button>
+          {onRefresh ? (
+            <button className="life-btn life-btn--ghost" disabled={loading} type="button" onClick={onRefresh}>
+              {loading ? 'Analysing…' : 'Refresh analysis'}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   )

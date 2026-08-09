@@ -168,7 +168,11 @@ function LifeModeParentPanel({ parentName = 'Alex', teenName = 'Jamie' }) {
         </div>
       </div>
       <LifeToast message={state.toast} />
-      <CoachingAlert alert={state.coachAlert} onClose={life.dismissCoachAlert} />
+      <CoachingAlert
+        alert={state.coachAlert}
+        onClose={life.dismissCoachAlert}
+        onRefresh={life.refreshCoachAi}
+      />
     </>
   )
 }

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { fetchLifeModeCoaching } from './coachApi'
 import {
   STORAGE_KEY,
+  applyCoachEnrichment,
   applyLoan,
+  buildWeekCoachContext,
   cardSpend,
   clearBanner,
   clearToast,
@@ -11,6 +14,7 @@ import {
   downloadWeeklySummary,
   endWeek,
   loadStoredState,
+  markCoachAnalysing,
   payBill,
   persistState,
   resetLifeMode,
@@ -53,6 +57,51 @@ export function useLifeMode({ parentName, teenName, isParentView = false } = {})
     return createInitialState(names)
   })
   const lastAlertId = useRef(state.coachAlert?.id || null)
+  const enrichInFlight = useRef(null)
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  const enrichCoachWithAi = useCallback(async (alertId, { force = false } = {}) => {
+    if (!alertId) return
+    if (!force && enrichInFlight.current === alertId) return
+    enrichInFlight.current = alertId
+
+    const snapshot = stateRef.current
+    setState((current) => markCoachAnalysing(current, alertId))
+
+    try {
+      const moment =
+        snapshot.coachAlert?.id === alertId
+          ? snapshot.coachAlert
+          : snapshot.pushes?.find((item) => item.id === alertId)
+      const coaching = await fetchLifeModeCoaching(buildWeekCoachContext(snapshot, moment))
+      setState((current) => applyCoachEnrichment(current, coaching, alertId))
+    } catch {
+      setState((current) => {
+        const existing =
+          current.coachAlert?.id === alertId
+            ? current.coachAlert
+            : current.pushes.find((item) => item.id === alertId)
+        return applyCoachEnrichment(
+          current,
+          {
+            mode: 'fallback',
+            title: existing?.title,
+            preview: existing?.preview,
+            what: existing?.what,
+            why: existing?.why,
+            how: existing?.how,
+            summary: existing?.preview || existing?.what,
+            discussion: existing?.why,
+            suggestedQuestion: '',
+          },
+          alertId,
+        )
+      })
+    } finally {
+      if (enrichInFlight.current === alertId) enrichInFlight.current = null
+    }
+  }, [])
 
   useEffect(() => {
     persistState(state)
@@ -105,9 +154,24 @@ export function useLifeMode({ parentName, teenName, isParentView = false } = {})
     notifyParent(state.coachAlert)
   }, [isParentView, state.coachAlert])
 
+  // Upgrade template coaching with live AI wording (same idea as Overview analyse).
+  useEffect(() => {
+    const alert = state.coachAlert
+    if (!alert?.id) return
+    if (alert.aiStatus === 'ready') return
+    if (alert.aiStatus === 'loading' && enrichInFlight.current === alert.id) return
+    enrichCoachWithAi(alert.id)
+  }, [state.coachAlert?.id, state.coachAlert?.aiStatus, enrichCoachWithAi])
+
   const apply = useCallback((updater) => {
     setState((current) => updater(current))
   }, [])
+
+  const refreshCoachAi = useCallback(() => {
+    const alertId = state.coachAlert?.id || state.pushes.find((item) => item.open)?.id
+    if (!alertId) return
+    enrichCoachWithAi(alertId, { force: true })
+  }, [enrichCoachWithAi, state.coachAlert?.id, state.pushes])
 
   return {
     state,
@@ -122,6 +186,7 @@ export function useLifeMode({ parentName, teenName, isParentView = false } = {})
     togglePush: (index) => apply((current) => togglePush(current, index)),
     dismissBanner: () => apply(clearBanner),
     dismissCoachAlert: () => apply(dismissCoachAlert),
+    refreshCoachAi,
     openBannerPush: () =>
       apply((current) => {
         if (!current.banner && !current.coachAlert) return current

@@ -183,7 +183,7 @@ function TeenDashboard() {
     `${Math.max(0, Math.min(100, (value / Math.max(1, money?.balance || 1)) * 100))}%`
 
   return (
-    <DashboardLayout role="teen" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab} showCoach={activeTab !== 'life'}>
+    <DashboardLayout role="teen" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab}>
       {notice && <div className="notice-banner" role="status"><span>✓</span>{notice}<button aria-label="Dismiss message" type="button" onClick={() => setNotice('')}>×</button></div>}
       {error && status !== 'error' && <div className="notice-banner notice-banner--error" role="alert"><span>!</span>{error}<button aria-label="Dismiss error" type="button" onClick={() => setError('')}>×</button></div>}
 

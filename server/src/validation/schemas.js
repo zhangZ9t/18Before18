@@ -192,3 +192,11 @@ export const aiChatSchema = z.object({
   params: z.object({}),
   query: z.object({}),
 })
+
+export const lifeModeCoachingSchema = z.object({
+  body: z.object({
+    week: z.record(z.string(), z.any()),
+  }),
+  params: z.object({}),
+  query: z.object({}),
+})

@@ -1,6 +1,7 @@
 import {
   answerFinancialQuestion,
   generateInsight,
+  generateLifeModeCoaching,
   generateSpendingDiscussion,
 } from '../services/ai/aiService.js'
 import { applyPromptWording } from '../services/insights/conversationPromptService.js'
@@ -44,5 +45,17 @@ export async function spendingDiscussion(request, response) {
     discussion,
     disclosure:
       'Category patterns only. Merchant detail stays in the teen’s own view.',
+  })
+}
+
+export async function lifeModeCoaching(request, response) {
+  const coaching = await generateLifeModeCoaching(request.validated.body.week, {
+    userId: request.user?.id || 'life-mode-demo',
+  })
+
+  return sendSuccess(response, {
+    coaching,
+    disclosure:
+      'This coach explains educational trade-offs from the Life Mode practice week. It is not financial advice.',
   })
 }

@@ -248,7 +248,7 @@ function ParentDashboard() {
   const maxCategory = overview ? Math.max(1, ...overview.spendingByCategory.map(({ amount }) => amount)) : 1
 
   return (
-    <DashboardLayout role="parent" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab} showCoach={activeTab !== 'life'}>
+    <DashboardLayout role="parent" navItems={navItems} activeTab={activeTab} onTabChange={setActiveTab}>
       {notice && <div className="notice-banner" role="status"><span>✓</span>{notice}<button aria-label="Dismiss message" type="button" onClick={() => setNotice('')}>×</button></div>}
       {error && status !== 'error' && <div className="notice-banner notice-banner--error" role="alert"><span>!</span>{error}<button aria-label="Dismiss error" type="button" onClick={() => setError('')}>×</button></div>}
 

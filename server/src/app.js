@@ -6,6 +6,7 @@ import { env } from './config/env.js'
 import { requireAuth, requireHouseholdAccess } from './middleware/auth.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { advanceRouter } from './routes/advanceRoutes.js'
+import { aiPublicRouter } from './routes/aiPublicRoutes.js'
 import { aiRouter } from './routes/aiRoutes.js'
 import { authRouter } from './routes/authRoutes.js'
 import { goalRouter } from './routes/goalRoutes.js'
@@ -42,6 +43,7 @@ export function createApp() {
   )
 
   app.use('/api/auth', authRouter)
+  app.use('/api/ai', aiPublicRouter)
 
   app.use('/api', requireAuth, requireHouseholdAccess)
   app.use('/api/household', householdRouter)

@@ -1038,7 +1038,71 @@
   font-weight: 900;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  margin-bottom: 0;
+}
+
+.life-coach-modal__flag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.life-coach-modal__mode {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #663388;
+  background: #f0e7f7;
+  border-radius: 999px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.life-coach-modal__mode--inline {
+  display: inline-flex;
+  margin-bottom: 8px;
+}
+
+.life-coach-modal__loading {
+  margin: 0 0 14px;
+  color: #656b7a;
+  font-size: 14px;
+}
+
+.life-coach-modal__ask {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f7f2fb;
+  border: 1px solid #e8dff0;
+}
+
+.life-coach-modal__ask span {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f6379;
+  margin-bottom: 8px;
+}
+
+.life-coach-modal__ask blockquote {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  color: #1f142b;
+}
+
+.life-coach-modal__actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .life-coach-modal h2 {

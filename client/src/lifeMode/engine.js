@@ -681,6 +681,95 @@ export function endWeek(state) {
   return deliverPush(withHistory, buildTeachingMoment(withHistory))
 }
 
+export function buildWeekCoachContext(state, moment = null) {
+  const alert = moment || state.coachAlert || state.banner || state.pushes[0] || null
+  return {
+    teenName: state.teenName,
+    parentName: state.parentName,
+    week: state.week,
+    phase: state.phase,
+    unpaid: unpaidTotal(state),
+    funSpend: state.funSpend,
+    teenBalance: state.teenBalance,
+    returnedThisWeek: state.returnedThisWeek,
+    carryDebt: state.carryDebt,
+    savingsTarget: savingsTarget(state),
+    deposit: Number(state.rules.income) || 0,
+    billsTotal: totalBills(state),
+    paid: state.paid,
+    enabled: state.enabled,
+    rules: state.rules,
+    activeLoan: state.activeLoan
+      ? {
+          purpose: state.activeLoan.purpose,
+          total: state.activeLoan.total,
+          weekly: state.activeLoan.weekly,
+          remainingBalance: state.activeLoan.remainingBalance,
+        }
+      : null,
+    recentTx: (state.teenTx || []).slice(0, 12).map((tx) => ({
+      label: tx.label,
+      amount: tx.amount,
+      meta: tx.meta,
+    })),
+    template: alert
+      ? {
+          id: alert.id,
+          severity: alert.severity,
+          title: alert.title,
+          preview: alert.preview,
+          what: alert.what,
+          why: alert.why,
+          how: alert.how,
+        }
+      : undefined,
+  }
+}
+
+export function applyCoachEnrichment(state, coaching, alertId) {
+  if (!coaching || !alertId) return state
+
+  const enrich = (item) => {
+    if (!item || item.id !== alertId) return item
+    return {
+      ...item,
+      title: coaching.title || item.title,
+      preview: coaching.preview || coaching.summary || item.preview,
+      what: coaching.what || coaching.summary || item.what,
+      why: coaching.why || coaching.discussion || item.why,
+      how: coaching.how || item.how,
+      summary: coaching.summary,
+      discussion: coaching.discussion,
+      suggestedQuestion: coaching.suggestedQuestion,
+      mode: coaching.mode || 'fallback',
+      aiStatus: 'ready',
+    }
+  }
+
+  return {
+    ...state,
+    coachAlert: enrich(state.coachAlert),
+    banner: enrich(state.banner),
+    pushes: state.pushes.map(enrich),
+    toast:
+      coaching.mode && coaching.mode !== 'fallback'
+        ? 'AI coaching ready'
+        : state.toast,
+  }
+}
+
+export function markCoachAnalysing(state, alertId) {
+  if (!alertId) return state
+  const mark = (item) =>
+    item?.id === alertId ? { ...item, aiStatus: 'loading', mode: item.mode || null } : item
+  return {
+    ...state,
+    coachAlert: mark(state.coachAlert),
+    banner: mark(state.banner),
+    pushes: state.pushes.map(mark),
+  }
+}
+
 export function togglePush(state, index) {
   return {
     ...state,
@@ -742,6 +831,14 @@ export function downloadWeeklySummary(state) {
   return { ok: true, toast: 'Weekly summary downloaded' }
 }
 
+function clearTransientCoachStatus(alert) {
+  if (!alert || typeof alert !== 'object') return alert
+  if (alert.aiStatus !== 'loading') return alert
+  const next = { ...alert }
+  delete next.aiStatus
+  return next
+}
+
 export function loadStoredState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -750,9 +847,14 @@ export function loadStoredState() {
     return {
       ...createInitialState(),
       ...parsed,
-      enabled: { ...DEFAULT_ENABLED, ...(parsed.enabled || {}) , income: true },
+      enabled: { ...DEFAULT_ENABLED, ...(parsed.enabled || {}), income: true },
       toast: '',
       banner: null,
+      // Never restore a stuck "Analysing…" state from a previous interrupted call.
+      coachAlert: clearTransientCoachStatus(parsed.coachAlert),
+      pushes: Array.isArray(parsed.pushes)
+        ? parsed.pushes.map(clearTransientCoachStatus)
+        : [],
     }
   } catch {
     return null
@@ -763,6 +865,10 @@ export function persistState(state) {
   const rest = { ...state }
   delete rest.toast
   delete rest.banner
+  rest.coachAlert = clearTransientCoachStatus(rest.coachAlert)
+  rest.pushes = Array.isArray(rest.pushes)
+    ? rest.pushes.map(clearTransientCoachStatus)
+    : []
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
 }
 
